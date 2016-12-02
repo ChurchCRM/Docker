@@ -16,5 +16,3 @@ services:
       MARIADB_DATABASE: churchcrm
       MARIADB_USER: churchcrm
       MARIADB_PASSWORD: my-secret-pw
-    ports:
-      - "3306:3306"
