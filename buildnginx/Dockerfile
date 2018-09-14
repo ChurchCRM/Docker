@@ -2,7 +2,7 @@ FROM nginx:alpine
 
 COPY ./conf.d/* /etc/nginx/conf.d/
 
-RUN  apk add --no-cache openssl
+RUN  apk add --update --no-cache openssl
 
 # SSL Generation
 WORKDIR /etc/nginx/conf.d

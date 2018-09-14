@@ -1,34 +1,38 @@
 #!/bin/ash
-cp /usr/local/apache2/htdocs/Include/Config.php.example /usr/local/apache2/htdocs/Include/Config.php
+if ! [ -d ./html ]; then
+    crmlatest=$(curl -s https://api.github.com/repos/churchCRM/CRM/releases/latest | grep "browser_download_url.*zip" | cut -d '"' -f 4); \
+    wget $crmlatest && \
+    unzip -q *.zip && \
+    rm -rf *.zip html && \
+    mv churchcrm html
 
-# Import Docker Secrets
-MYSQL_USER=$(cat /run/secrets/crm_secrets | jq -r '.mysql.MYSQL_USER')
-MYSQL_USER_PWD=$(cat /run/secrets/crm_secrets | jq -r '.mysql.MYSQL_USER_PWD')
-MYSQL_USER_DB=$(cat /run/secrets/crm_secrets | jq -r '.mysql.MYSQL_USER_DB')
+    cp /var/www/html/Include/Config.php.example /var/www/html/Include/Config.php
 
-if [ $MYSQL_USER_PWD = "changeme" ]; then
-    figlet -f colossal "WARNING"
-    red=$(tput setaf 1)    # Red
-    reset=$(tput sgr0)
-    echo "${red}*********************************************"
-    echo "${red}WARNING!!!"
-    echo "${red}YOU DID NOT CHANGE THE MYSQL_USER_PWD IN THE crm_secrets.json FILE!!!"
-    echo "${red}This is EXTREMELY insecure. Please go back and change the password to something more secure and re-build your images by running `docker-compose build`"
-    echo "${red}*********************************************"
-    ${reset}
-    echo ""
+    # Import Docker Secrets
+    MYSQL_USER=$(cat /run/secrets/crm_secrets | jq -r '.mysql.MYSQL_USER')
+    MYSQL_USER_PWD=$(cat /run/secrets/crm_secrets | jq -r '.mysql.MYSQL_USER_PWD')
+    MYSQL_USER_DB=$(cat /run/secrets/crm_secrets | jq -r '.mysql.MYSQL_USER_DB')
+
+    if [ $MYSQL_USER_PWD = "changeme" ]; then
+        figlet -f colossal "WARNING"
+        red=$(tput setaf 1)    # Red
+        reset=$(tput sgr0)
+        echo "${red}*********************************************"
+        echo "${red}WARNING!!!"
+        echo "${red}YOU DID NOT CHANGE THE MYSQL_USER_PWD IN THE crm_secrets.json FILE!!!"
+        echo "${red}This is EXTREMELY insecure. Please go back and change the password to something more secure and re-build your images by running `docker-compose build`"
+        echo "${red}*********************************************"
+        ${reset}
+        echo ""
+    fi
+
+    # Create ChurchCRM Config File
+    sed -i "s/||DB_SERVER_NAME||/$MYSQL_DB_HOST/g" /var/www/html/Include/Config.php
+    sed -i "s/||DB_SERVER_PORT||/3306/g" /var/www/html/Include/Config.php
+    sed -i "s/||DB_NAME||/$MYSQL_USER_DB/g" /var/www/html/Include/Config.php
+    sed -i "s/||DB_USER||/$MYSQL_USER/g" /var/www/html/Include/Config.php
+    sed -i "s/||DB_PASSWORD||/$MYSQL_USER_PWD/g" /var/www/html/Include/Config.php
+    sed -i "s/||URL||//g" /var/www/html/Include/Config.php
+    sed -i "s/||ROOT_PATH||//g" /var/www/html/Include/Config.php
 fi
-
-#Add Server Name to HTTPD-SSL
-sed -i "s/ServerName www.example.com:443/ServerName 0.0.0.0:443/g" /usr/local/apache2/conf/extra/httpd-ssl.conf
-
-# Create ChurchCRM Config File
-sed -i "s/||DB_SERVER_NAME||/$MYSQL_DB_HOST/g" /usr/local/apache2/htdocs/Include/Config.php
-sed -i "s/||DB_SERVER_PORT||/3306/g" /usr/local/apache2/htdocs/Include/Config.php
-sed -i "s/||DB_NAME||/$MYSQL_USER_DB/g" /usr/local/apache2/htdocs/Include/Config.php
-sed -i "s/||DB_USER||/$MYSQL_USER/g" /usr/local/apache2/htdocs/Include/Config.php
-sed -i "s/||DB_PASSWORD||/$MYSQL_USER_PWD/g" /usr/local/apache2/htdocs/Include/Config.php
-sed -i "s/||URL||//g" /usr/local/apache2/htdocs/Include/Config.php
-sed -i "s/||ROOT_PATH||//g" /usr/local/apache2/htdocs/Include/Config.php
-
 exec "$@"
