@@ -2,20 +2,67 @@
 # from this file by first filling in your password and db info in the .env
 # file and then running "docker-compose build", "docker-compose up" in terminal.
 
-version: '2'
+version: '3.5'
 
 services:
 
   database: #Name of DB Host
     container_name: database
-    image: jaskipper/alpine-mariadb
-    env_file:
-      - .env
+    build: ./build-mysql
+    volumes:
+      - db-volume:/var/lib/mysql
+    secrets:
+      - crm_secrets
+    tty: true
 
   churchcrm:
     container_name: churchcrm
-    build: ./build-files
+    build:
+      context: ./build-php-fpm
+    depends_on:
+      - database
+    environment:
+      MYSQL_DB_HOST: database
+      LC_ALL: en_US
+    volumes:
+      - ./www:/var/www
+      - ./build-php-fpm/www.conf:/usr/local/etc/php-fpm.d/www.conf:ro
+    secrets:
+      - crm_secrets
+      - crm_fix
+    tty: true
+
+  nginx:
+    build:
+      context: ./build-nginx
+    container_name: nginx-letsencrypt
+    volumes:
+      - ./www:/var/www
+      - ./ssl:/etc/nginx/ssl
+      - ./conf.site:/etc/nginx/conf.d/site
+      - ssl_vol:/root/.acme.sh
+    links:
+      - churchcrm
     ports:
       - "80:80"
-    env_file:
-      - .env
+      - "443:443"
+    secrets:
+      - ssl.json
+      - dns_api.json
+#      - ssl_test
+
+secrets:
+  ssl.json:
+    file: ./ssl.json
+  dns_api.json:
+    file: ./dns_api.json
+  crm_secrets:
+    file: ./crm_secrets.json
+  crm_fix:
+    file: ./test/crm_fix
+  ssl_test:
+    file: ./test/ssl_test
+
+volumes:
+  db-volume:
+  ssl_vol:

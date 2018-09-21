@@ -1,0 +1,10 @@
+server {
+    listen 80;
+    root /var/www/html;
+    server_name www.example.com;
+
+    location / {
+
+    }
+}
+

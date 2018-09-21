@@ -1,0 +1,1 @@
+sed -i 's/CURLOPT_URL, \$_SERVER\[\x27HTTP_HOST\x27\]/CURLOPT_URL, $_SERVER['\''REQUEST_SCHEME'\''].":\/\/".$_SERVER['\''HTTP_HOST'\'']/g' /var/www/html/ChurchCRM/Service/AppIntegrityService.php

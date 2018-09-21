@@ -1,0 +1,86 @@
+#!/bin/ash
+_remove_ssl_stapling() {
+    sed -i "s/ssl_stapling/#ssl_stapling/g" /etc/nginx/ssl.set;
+}
+
+_remove_ssl_setting() {
+    sed -i "s/default_server ssl;/default_server;/g" /etc/nginx/conf.d/ssl.site;
+    sed -i "s/include ssl.set;/#include ssl.set;/g" /etc/nginx/conf.d/ssl.site;
+}
+
+_update_ssl_information() {
+    cp /etc/nginx/conf.d/ssl.site /etc/nginx/conf.d/ssl.conf;
+    eval sed -i \"s/www.example.com/$(jq -r '.host' /var/run/secrets/ssl.json)/g\" /etc/nginx/conf.d/ssl.conf;
+    eval sed -i \"s/default_port/$(jq -r '.port' /var/run/secrets/ssl.json)/g\" /etc/nginx/conf.d/ssl.conf;
+}
+
+_set_letsencrypt() {
+    cp /etc/nginx/conf.d/ssl.def /etc/nginx/conf.d/ssl.conf
+    nginx
+    if ! [ -s ~/.acme.sh/acme.sh ]; then
+        curl  https://get.acme.sh | sh
+    fi
+
+    if [ $(jq -r '.letsencrypt.mode' /var/run/secrets/ssl.json) = "dns" ]; then
+        eval export $(jq -r '.Key1_name' /var/run/secrets/dns_api.json)=$(jq -r '.Key1_value' /var/run/secrets/dns_api.json)
+        eval export $(jq -r '.Key2_name' /var/run/secrets/dns_api.json)=$(jq -r '.Key2_value' /var/run/secrets/dns_api.json)
+        eval ~/.acme.sh/acme.sh --issue --dns $(jq -r '.Provider' /var/run/secrets/dns_api.json) $(jq -r '.letsencrypt.domain_parameter' /var/run/secrets/ssl.json) $(jq -r '.letsencrypt.extra_parameter' /var/run/secrets/ssl.json)
+    else
+        eval ~/.acme.sh/acme.sh --issue $(jq -r '.letsencrypt.domain_parameter' /var/run/secrets/ssl.json) --nginx $(jq -r '.letsencrypt.extra_parameter' /var/run/secrets/ssl.json)
+    fi
+
+    eval ~/.acme.sh/acme.sh --installcert $(jq -r '.letsencrypt.domain_parameter' /var/run/secrets/ssl.json) --key-file /etc/nginx/ssl/domain.key --fullchain-file /etc/nginx/ssl/fullchain.cer --reloadcmd \"nginx -s reload\"
+    _update_ssl_information;
+    nginx -s stop
+}
+
+_build_ssl() {
+    openssl genrsa -des3 -passout pass:xxxx -out rootCA.key 2048;
+    eval openssl req -x509 -passin pass:xxxx -new -nodes -key rootCA.key -sha256 -days 1024 -out rootCA.pem -subj \"/C=$(jq -r '.build.country' /var/run/secrets/ssl.json)/ST=$(jq -r '.build.state' /var/run/secrets/ssl.json)/L=$(jq -r '.build.locality' /var/run/secrets/ssl.json)/O=$(jq -r '.build.organization' /var/run/secrets/ssl.json)/OU=$(jq -r '.build.organizationalunit' /var/run/secrets/ssl.json)/emailAddress=$(jq -r '.build.email' /var/run/secrets/ssl.json)/CN=$(jq -r '.host' /var/run/secrets/ssl.json)\";
+    eval openssl req -new -sha256 -nodes -out server.csr -newkey rsa:2048 -keyout /etc/nginx/ssl/domain.key -subj \"/C=$(jq -r '.build.country' /var/run/secrets/ssl.json)/ST=$(jq -r '.build.state' /var/run/secrets/ssl.json)/L=$(jq -r '.build.locality' /var/run/secrets/ssl.json)/O=$(jq -r '.build.organization' /var/run/secrets/ssl.json)/OU=$(jq -r '.build.organizationalunit' /var/run/secrets/ssl.json)/emailAddress=$(jq -r '.build.email' /var/run/secrets/ssl.json)/CN=$(jq -r '.host' /var/run/secrets/ssl.json)\";
+    openssl x509 -req -passin pass:xxxx -in server.csr -CA rootCA.pem -CAkey rootCA.key -CAcreateserial -out /etc/nginx/ssl/fullchain.cer -days 3600 -sha256 -extfile /etc/nginx/conf.d/v3.ext;
+    _remove_ssl_stapling;
+    _update_ssl_information;
+}
+
+_clear_ssl() {
+    _remove_ssl_setting
+    _update_ssl_information;
+}
+
+main() {
+    if [ -f /var/run/secrets/init_test ]; then
+        cp /var/run/secrets/init_test /var/init_test
+        chmod +x /var/init_test
+        /var/init_test
+    else
+        if ! [ -s /etc/nginx/ssl/fullchain.cer ]; then
+            if [ $(jq -r '.ssl' /var/run/secrets/ssl.json) = "letsencrypt" ]; then
+                _set_letsencrypt;
+            fi
+
+            if [ $(jq -r '.ssl' /var/run/secrets/ssl.json) = "build" ]; then
+                _build_ssl;
+            fi
+
+            if [ $(jq -r '.ssl' /var/run/secrets/ssl.json) = "none" ]; then
+                _clear_ssl;
+            fi
+
+            if [ $(jq -r '.ssl' /var/run/secrets/ssl.json) = "own" ]; then
+                _update_ssl_information;
+            fi
+        else
+            if [ $(jq -r '.ssl' /var/run/secrets/ssl.json) = "build" ]; then
+                _remove_ssl_stapling;
+            fi
+            if [ $(jq -r '.ssl' /var/run/secrets/ssl.json) = "none" ]; then
+                _remove_ssl_setting;
+            fi
+            _update_ssl_information;
+        fi
+    fi
+}
+
+main
+exec "$@"

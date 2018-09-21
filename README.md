@@ -1,87 +1,46 @@
 ## Docker ChurchCRM
 
-This is the Docker Installation of ChurchCRM. This image is the latest release ChurchCRM for Docker. It is installed on Alpine Linux, Apache, PHP7 & is using MariaDB in a separate Alpine container.
+This is the Docker Installation of ChurchCRM. This will build the latest release of ChurchCRM for Docker. It is made with Apache/PHP7/ChurchCRM and MariaDB in 2 separate containers and a third container (nginx working as a reverse proxy) that work together.
 
 ### How To Use
 
-To use, first change your desired database info and **passwords** in the **``.env``** file. *(Download that file from the main ChurchCRM/Docker repository directory)*
+It is necessary to have Docker installed on your system for this to work. See https://www.docker.com/community-edition#/download...
 
-Once complete, Start ChurchCRM in Docker by using the Docker RUN command from the directory that your ``.env`` file resides or by building and starting with docker-compose.
+* Clone this repository.
+* Change your desired **database info** and **passwords** in the crm_secrets.json file. **PLEASE CHANGE**
+* Change your desired SSL setup in the ssl.json file, if use letsencrypt dns mode, need setup dns_api.json.
+* From the command line, navigate to the root folder of your local repository and use docker-compose to build and run ChurchCRM. Run the following commands.
+    - `docker-compose build`
+    - `docker-compose up`
+* You can view your installation of ChurchCRM on Docker by going to https://localhost (or your server's IP address) in a browser.
+* Enter the default login information:
+    - Username: `admin`
+    - Password: `changeme`
+- Once in, you will be prompted to change your password to something more secure.
 
-#### Starting with Docker Run
+### SSL
 
-For example, you can start MariaDB first with the following command. Make sure to **change the passwords** in the ``.env`` file first.
+ChurchCRM for Docker is set to run by default using SSL encryption. There are 3 build options in regards to SSL.
 
-``docker run --name database --env-file .env -d jaskipper/alpine-mariadb``
+* `letsencrypt`: Support acme.sh to set letsencrypt, default is webroot mode, use port 80 to check the domain permission.Support dns mode, use API update dns server to check domain ownship, use this mode can let internal net have letsencrypt support. Use dns mode need set the dns_api.json, first issue SSL certificates need wait dns server 120 seconds. See https://github.com/Neilpang/acme.sh/tree/master/dnsapi. "extra_parameter" can add --test for test certificates, add --forece to force update certrificates, when ssl folder no fullchain.cer file, will issue a new SSL certificates.
+* `build`: This option will create an SSL certificate for you. Please fill out your information in the docker_compose.yml file under the nginx: args section.
+* `own`: With this option, you will need to provide your own SSL certificates. Please put your own "fullchain.cer" and "domain.key" files in the ssl folder. SSL will not work if chooseing this option and not adding the correctly named certificates there.
+* `none`: This will run an installation of ChurchCRM without SSL. You will be able to access your installation at http://localhost (as opposed to https://localhost)
 
-Then start the ChurchCRM container:
+**NOTE** While using SSL on localhost, browsers will prompt with an error/warning that they don't recognize the Certificate Authority *(which is yourself in this case)*. When this occurs, allow the exception and continue to the site.
 
-``docker run --name churchcrm -p 80:80 --link database --env-file .env -d churchcrm/crm``
+### Using a Domain Name instead of https://localhost
 
-Visit your website and you will be up and running. Log in with the default username ``admin`` and password ``changeme`` and then change your admin password on the next screen.
+In order to access ChurchCRM via a domain name other than localhost, set an entry in your local computer's `/etc/hosts` file.
 
-#### Building and Starting with Docker-Compose
+* See https://www.siteground.com/kb/how_to_use_the_hosts_file/ to see where your hosts file is located and how to update.
+* Add an entry in your `hosts` file such as `127.0.0.1     local.churchcrm.io`
+* Once saved you can access your installation by going to `https://local.churchcrm.io` or any domainname that you specified in the hosts file.
 
-To build and run with Docker-Compose, you must have all of the files in the Github repo. Download the Github Docker repository and run ``docker-compose build`` and ``docker-compose up`` from the project folder. **Be SURE to Change Passwords in the .env file before starting your container**.
+### Accessing ChurchCRM from another device
 
-## Environment variables used in the container
+While on the same local network, you can access ChurchCRM by visiting the IP address of the computer running Docker. For example, if your machine's local ip is 192.168.1.3, visiting that address (https://192.168.1.3) from another device will allow you to access ChurchCRM.
 
-It is recommended that you use the .env file to add your passwords, but you may also add those ENV's with the -e flag with ``docker run -e ...``.
+### DATA STORAGE
 
-### MYSQL_DB_HOST
-This variable defines the host in order for ChurchCRM to be able to connect to the database.
-
-	-e MYSQL_DB_HOST=database *(This is default and recommended to stay that way unless you know what you are doing)*
-
-### MYSQL_ROOT_PASSWORD
-This variable defines the password for the root user in the database, set it with
-
-	-e MYSQL_ROOT_PASSWORD=secretpassword
-
-add quotes if there is spaces or other special character in the password
-
-	-e MYSQL_ROOT_PASSWORD='password with spaces'
-
-### MYSQL_RANDOM_ROOT_PASSWORD
-This variable generate a random password for the root user, add
-
-	-e MYSQL_RANDOM_ROOT_PASSWORD=yes
-
-the password can then be found by looking at the logoutput
-
-	docker logs <container>
-
-### MYSQL_ALLOW_EMPTY_PASSWORD
-This allows the root password to be blank, THIS IS A MAJOR SECURITY RISK, add
-
-	-e MYSQL_ALLOW_EMPTY_PASSWORD=yes
-
-### MYSQL_REMOTE_ROOT
-Normal the root user can only use localhost to access the databases adding
-
-	-e MYSQL_REMOTE_ROOT=yes
-
-allows root access from any host
-
-### MYSQL_DATABASE
-creates a database with the defined name
-
-	-e MYSQL_DATABASE=databasename
-
-### MYSQL_USER
-creates a user with password defined with MYSQL_PASSWORD and full access to the database defined by MYSQL_DATABASE
-
-	-e MYSQL_USER=username
-
-### MYSQL_PASSWORD
-The password for the user defined by MYSQL_USER
-
-	-e MYSQL_PASSWORD=donottell
-
-### CHURCHCRM_ADMIN
-
-To come...
-
-### CHURCHCRM_PASSWORD
-
-To come...
+Running the `docker-compose up` command will create 2 separate Docker data-volumes to store the database and ChurchCRM uploaded photos. When the database and ChurchCRM images and containers are destroyed, rebuilt or updated, the data-volumes will persist unless you remove those volumes.

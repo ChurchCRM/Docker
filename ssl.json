@@ -1,0 +1,18 @@
+{
+    "ssl": "letsencrypt",
+    "host": "www.example.com",
+    "port": "443",
+    "letsencrypt": {
+        "mode": "dns",
+        "domain_parameter": "-d example.com",
+        "extra_parameter": ""
+    },
+    "build":{
+        "country": "US",
+        "state": "Tennessee",
+        "locality": "Nashville",
+        "organization": "ChurchCRM",
+        "organizationalunit": "IT",
+        "email": "admin@example.com"
+    }
+}
