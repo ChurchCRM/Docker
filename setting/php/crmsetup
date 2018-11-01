@@ -1,0 +1,39 @@
+#!/bin/ash
+if ! [ -f ./html/index.php ]; then
+    crmlatest=$(curl -s https://api.github.com/repos/churchCRM/CRM/releases/latest | grep "browser_download_url.*zip" | cut -d '"' -f 4); \
+    wget $crmlatest && \
+    unzip -q *.zip && \
+    rm -rf *.zip html && \
+    mv churchcrm html
+fi
+
+if ! [ -f ./html/Include/Config.php ]; then
+    cp /var/www/html/Include/Config.php.example /var/www/html/Include/Config.php
+
+    # Import Docker Secrets
+    MYSQL_USER=$(cat /run/secrets/crm_secrets | jq -r '.mysql.MYSQL_USER')
+    MYSQL_USER_PWD=$(cat /run/secrets/crm_secrets | jq -r '.mysql.MYSQL_USER_PWD')
+    MYSQL_USER_DB=$(cat /run/secrets/crm_secrets | jq -r '.mysql.MYSQL_USER_DB')
+
+    if [ $MYSQL_USER_PWD = "changeme" ]; then
+        figlet -f colossal "WARNING"
+        red=$(tput setaf 1)    # Red
+        reset=$(tput sgr0)
+        echo "${red}*********************************************"
+        echo "${red}WARNING!!!"
+        echo "${red}YOU DID NOT CHANGE THE MYSQL_USER_PWD IN THE crm_secrets.json FILE!!!"
+        echo "${red}This is EXTREMELY insecure. Please go back and change the password to something more secure and re-build your images by running `docker-compose build`"
+        echo "${red}*********************************************"
+        ${reset}
+        echo ""
+    fi
+
+    # Create ChurchCRM Config File
+    sed -i "s/||DB_SERVER_NAME||/$MYSQL_DB_HOST/g" /var/www/html/Include/Config.php
+    sed -i "s/||DB_SERVER_PORT||/3306/g" /var/www/html/Include/Config.php
+    sed -i "s/||DB_NAME||/$MYSQL_USER_DB/g" /var/www/html/Include/Config.php
+    sed -i "s/||DB_USER||/$MYSQL_USER/g" /var/www/html/Include/Config.php
+    sed -i "s/||DB_PASSWORD||/$MYSQL_USER_PWD/g" /var/www/html/Include/Config.php
+    sed -i "s/||URL||//g" /var/www/html/Include/Config.php
+    sed -i "s/||ROOT_PATH||//g" /var/www/html/Include/Config.php
+fi

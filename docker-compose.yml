@@ -1,21 +1,120 @@
-# This is the Build docker-compose.yml file. You can build and Run ChurchCRM
-# from this file by first filling in your password and db info in the .env
-# file and then running "docker-compose build", "docker-compose up" in terminal.
-
-version: '2'
-
+version: '3.5'
 services:
-
-  database: #Name of DB Host
-    container_name: database
-    image: jaskipper/alpine-mariadb
-    env_file:
-      - .env
-
-  churchcrm:
-    container_name: churchcrm
-    build: ./build-files
+  web:
+    container_name: web
+    build: ./build/nginx-proxy
+    environment:
+      - DEFAULT_HOST=localhost
     ports:
       - "80:80"
-    env_file:
-      - .env
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - dhparam-volume:/etc/nginx/dhparam/
+      - ./setting/nginx/vhost.d/:/etc/nginx/vhost.d:ro
+      - ./setting/nginx/proxy.conf:/etc/nginx/proxy.conf:ro
+      - ./setting/nginx/updatessl.sh:/app/prechk
+      - ./setting/nginx/dns_dynu.sh:/acme.sh/dnsapi/dns_dynu.sh # fix dynu.sh issue
+      - ./secrets/acme:/acmecerts #acme.sh install folder
+      - ./secrets/certs:/etc/nginx/certs #certs folder
+#      - ./setting/nginx/Procfile-debug:/app/Procfile:ro  #debug nginx mode. need enable error_log /var/debug/error.log debug;
+#      - ./log/nginx:/var/debug #debug use.
+    restart: always
+    secrets:
+      - dns_api
+      - ssl
+#    network_mode: "host"
+
+  db:
+    container_name: db
+    build: ./build/mysql
+    volumes:
+      - db-volume:/var/lib/mysql
+      - ./setting/sql/sql_setup:/usr/local/prechk
+    secrets:
+      - crm_secrets
+
+  php:
+    container_name: php
+    build:
+      context: ./build/php-fpm
+    links:
+      - db
+    environment:
+      - MYSQL_DB_HOST=db
+      - LC_ALL=zh_TW  ##### locale  #####
+      - VIRTUAL_HOST=www.example.com  ##### need modify  #####
+      - VIRTUAL_PROTO=fastcgi
+      - VIRTUAL_ROOT=/var/www/html
+      - VIRTUAL_PORT=9000
+      - ENABLE_ACME=true
+      - ENABLE_HSTS=true
+    volumes:
+#      - ./content/www:/var/www # php file debug
+      - content:/var/www
+      - ./setting/php/default.conf:/usr/local/etc/php-fpm.d/www.conf:ro
+      - ./setting/php/crmsetup:/usr/local/prechk
+#      - ./log/php:/usr/local/var/log  #debug use.
+    secrets:
+      - crm_secrets
+
+  php1:
+    container_name: php1
+    image: php:fpm-alpine
+    environment:
+      - VIRTUAL_HOST=www.example1.com
+      - VIRTUAL_PROTO=fastcgi
+      - VIRTUAL_ROOT=/var/www/html
+      - VIRTUAL_PORT=9000
+      - ENABLE_ACME=true
+    volumes:
+      - ./html:/var/www/html
+
+  php2:
+    container_name: php2
+    image: php:fpm-alpine
+    environment:
+      - VIRTUAL_HOST=localhost
+      - VIRTUAL_PROTO=fastcgi
+      - VIRTUAL_ROOT=/var/www/html
+      - VIRTUAL_PORT=9000
+#      - HTTPS_METHOD=nohttps
+    volumes:
+      - ./html:/var/www/html
+
+  php3:
+    container_name: php3
+    image: php:fpm-alpine
+    environment:
+      - VIRTUAL_HOST=www.example2.com
+      - VIRTUAL_PROTO=fastcgi
+      - VIRTUAL_ROOT=/var/www/html
+      - VIRTUAL_PORT=9000
+      - HTTPS_METHOD=nohttps
+    volumes:
+      - ./html:/var/www/html
+
+#  new_php_site:
+#    image: php:fpm-alpine
+#    environment:
+#      - VIRTUAL_HOST=www.example.com
+#      - VIRTUAL_PROTO=fastcgi
+#      - VIRTUAL_ROOT=/var/www/html
+#      - VIRTUAL_PORT=9000
+#      - ENABLE_ACME=true
+#    volumes:
+#      - ./html:/var/www/html
+
+secrets:
+  crm_secrets:
+    file: ./secrets/crm_sql_secrets.json
+  dns_api:
+    file: ./secrets/dns_api.json  ##### need modify  #####
+  ssl:
+    file: ./secrets/ssl.json  ##### need modify  #####
+
+volumes:
+  db-volume: null
+  dhparam-volume: null
+  content: null
+

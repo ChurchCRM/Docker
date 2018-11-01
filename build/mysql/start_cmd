@@ -1,0 +1,6 @@
+#!/bin/ash
+
+# parameters
+MYSQL_DATADIR=${MYSQL_DATADIR:-"/var/lib/mysql"}
+
+exec /usr/bin/mysqld --user=mysql --console --datadir="$MYSQL_DATADIR"

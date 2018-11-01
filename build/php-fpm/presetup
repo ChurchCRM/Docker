@@ -1,0 +1,7 @@
+#!/bin/ash
+if [ -f /usr/local/prechk ]; then
+    cp /usr/local/prechk /usr/local/bin
+    chmod +x /usr/local/bin/prechk
+    /usr/local/bin/prechk
+fi
+exec "$@"

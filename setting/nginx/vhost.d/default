@@ -1,0 +1,105 @@
+#error_log /var/debug/error.log debug;
+
+include mime.types;
+default_type  application/octet-stream;
+fastcgi_index index.php;
+root /var/www/html;
+
+location /api/ {
+	try_files $uri /api/index.php$is_args$args;
+}
+
+location /v2/ {
+	try_files $uri /v2/index.php$is_args$args;
+}
+
+location /external/ {
+	try_files $uri /external/index.php$is_args$args;
+}
+
+location ~ \..*/.*\.php$ {
+	return 403;
+}
+
+# PHP
+location ~ .php/ {
+	rewrite ^(.*.php)/ $1 last;
+}
+
+location ~ \.php {
+#	try_files $fastcgi_script_name =404;
+	fastcgi_split_path_info ^(.+\.php)(/.+)$;
+	fastcgi_pass $server_name;
+	include fastcgi_params;
+	fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+	fastcgi_param PATH_INFO $fastcgi_path_info;
+	fastcgi_param PHP_VALUE "memory_limit=256M \n max_execution_time=600";
+}
+
+# deny access to .htaccess files, if Apache's document root
+# concurs with nginx's one
+#
+location ~ /\.ht {
+	deny all;
+}
+
+# deny access to hidden files
+location ~ /\. {
+	access_log off;
+	log_not_found off;
+	deny all;
+}
+
+# Nginx Cache Control for Static Files (Browser Cache Control Directives)
+location ~* \.css$ {
+	add_header Content-Type 'text/css';
+	fastcgi_hide_header "Content-Type";
+	include ./vhost.d/php-fpm_content_cache;
+}
+
+location ~* \.js$ {
+	add_header Content-Type 'application/javascript';
+	fastcgi_hide_header "Content-Type";
+	include ./vhost.d/php-fpm_content_cache;
+}
+
+location ~* \.(jpg|jpeg)$ {
+	add_header Content-Type 'image/jpeg';
+	fastcgi_hide_header "Content-Type";
+	include ./vhost.d/php-fpm_content_cache;
+}
+
+location ~* \.xml$ {
+	add_header Content-Type 'text/xml';
+	fastcgi_hide_header "Content-Type";
+	include ./vhost.d/php-fpm_content_cache;
+}
+
+location ~* \.gif$ {
+	add_header Content-Type 'image/gif';
+	fastcgi_hide_header "Content-Type";
+	include ./vhost.d/php-fpm_content_cache;
+}
+
+location ~* \.png$ {
+	add_header Content-Type 'image/png';
+	fastcgi_hide_header "Content-Type";
+	include ./vhost.d/php-fpm_content_cache;
+}
+
+location ~* \.ico$ {
+	add_header Content-Type 'image/x-icon';
+	fastcgi_hide_header "Content-Type";
+	include ./vhost.d/php-fpm_content_cache;
+}
+
+location ~* \.(woff|woff2)$ {
+	add_header Content-Type 'application/font-woff';
+	fastcgi_hide_header "Content-Type";
+	include ./vhost.d/php-fpm_content_cache;
+}
+
+location ~* \.(ttf|min)$ {
+	include ./vhost.d/php-fpm_content_cache;
+}
+
