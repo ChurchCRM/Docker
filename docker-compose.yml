@@ -1,21 +1,92 @@
 # This is the Build docker-compose.yml file. You can build and Run ChurchCRM
 # from this file by first filling in your password and db info in the .env
-# file and then running "docker-compose build", "docker-compose up" in terminal.
+# file and then running "docker-compose up -d" in terminal.
 
-version: '2'
+version: '3.5'
 
 services:
 
-  database: #Name of DB Host
-    container_name: database
-    image: jaskipper/alpine-mariadb
-    env_file:
-      - .env
+  mysql:
+    container_name: mysql
+    image: mariadb:${MYSQL_VER:-10.3}
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-churchcrmDB}
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_pwd
+      MYSQL_USER_FILE: /run/secrets/mysql_user
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql_pwd
+    volumes:
+      ## keep database
+      - mysql_data:/var/lib/mysql
+    secrets:
+      - mysql_root_pwd
+      - mysql_user
+      - mysql_pwd
 
-  churchcrm:
-    container_name: churchcrm
-    build: ./build-files
+  php:
+    container_name: php
+    image: devilbox/php-fpm:${PHP_VER:-7.2}-prod
+    depends_on:
+      - mysql
+    environment:
+      ## version can be latest or 3.2.3 ...
+      CRM_RELEASE_VERSION: ${CRM_VER:-latest}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-churchcrmDB}
+      TIMEZONE: ${OS_TIMEZONE:-UTC}
+      FORWARD_PORTS_TO_LOCALHOST: '3306:mysql:3306, 80:web:80, 443:web:443'
+      DOCKER_LOGS: 0
+#      DEBUG_RUNTIME: 1
+#      DEBUG_ENTRYPOINT: 1
+    entrypoint: ["bash", "-c", "/init.sh"]
+    volumes:
+      - ./www:/var/www/default
+      - ./crm_init.sh:/init.sh
+      ## enabled by setting DOCKER_LOGS: 0
+      - ./log/php/:/var/log/php
+      ## used when enable email catch-all
+      - mail:/var/mail
+    secrets:
+      - mysql_user
+      - mysql_pwd
+
+  web:
+    container_name: web
+    image: devilbox/${WEB_VER:-apache-2.4}
+    links:
+      - mysql
+      - php
+    environment:
+      PHP_FPM_ENABLE: 1
+      PHP_FPM_SERVER_ADDR: php
+      PHP_FPM_SERVER_PORT: 9000
+      MAIN_VHOST_ENABLE: 1
+      MAIN_VHOST_SSL_GEN: 1
+      MAIN_VHOST_SSL_TYPE: both
+      MAIN_VHOST_SSL_CN: ${VHOST_NAME:-localhost}
+      MAIN_VHOST_DOCROOT: churchcrm
+      TIMEZONE: ${OS_TIMEZONE:-UTC}
+      DOCKER_LOGS: 0
+#      DEBUG_RUNTIME: 1
+#      DEBUG_ENTRYPOINT: 2
+    volumes:
+      - ./www:/var/www/default
+      - ./ca:/ca
+      - ./templates/:/var/www/default/cfg
+      ## enabled by setting DOCKER_LOGS: 0
+      - ./log/web/${WEB_VER:-apache-2.4}/:/var/log/${WEB_VER:-apache-2.4}
+      - httpd:/shared/httpd
     ports:
       - "80:80"
-    env_file:
-      - .env
+      - "443:443"
+
+volumes:
+  mysql_data: null
+  mail: null
+  httpd: null
+
+secrets:
+  mysql_root_pwd:
+    file: ${MYSQL_ROOT_PASSWORD_FILE:-./secrets/mysql_root_pwd.dat}
+  mysql_user:
+    file: ${MYSQL_USER_FILE:-./secrets/mysql_user.dat}
+  mysql_pwd:
+    file: ${MYSQL_PASSWORD_FILE:-./secrets/mysql_pwd.dat}
