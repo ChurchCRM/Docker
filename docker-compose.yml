@@ -1,21 +1,90 @@
-# This is the Build docker-compose.yml file. You can build and Run ChurchCRM
-# from this file by first filling in your password and db info in the .env
-# file and then running "docker-compose build", "docker-compose up" in terminal.
-
-version: '2'
-
+version: '3.5'
 services:
-
-  database: #Name of DB Host
-    container_name: database
-    image: jaskipper/alpine-mariadb
-    env_file:
-      - .env
-
-  churchcrm:
-    container_name: churchcrm
-    build: ./build-files
+  web:
+    container_name: web
+    image: churchcrm/crm:web-latest
+    build:
+      context: ./build/nginx
+    environment:
+      - DEFAULT_HOST=${_DEFAULT_HOST:-myapp.localtest.me}
     ports:
-      - "80:80"
-    env_file:
-      - .env
+      - "${_WEB_HTTP_PORT:-80}:80"
+      - "${_WEB_HTTPS_PORT:-443}:443"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - dhparam-volume:/etc/nginx/dhparam/
+      - ./setting/nginx/vhost.d/:/etc/nginx/vhost.d:ro
+      - ./setting/nginx/stream.d/:/etc/nginx/stream.d
+      - ./setting/nginx/proxy.conf:/etc/nginx/proxy.conf:ro
+      - ./setting/nginx/nginx.tmpl:/app/nginx.tmpl:ro
+      - ./setting/nginx/updatessl.sh:/app/updatessl.sh
+      - ./setting/nginx/pre-init.d/:/scripts/pre-init.d/
+      - ${_CERTS_FOLDER:-./keys}/acme:/acmecerts                #acme.sh install folder
+      - ${_CERTS_FOLDER:-./keys}/certs:/etc/nginx/certs         #certs folder
+      - ${_LOG_FOLDER:-./log}/nginx:/var/log/nginx              #log
+    restart: always
+    secrets:
+      - dns_api
+      - ssl
+    networks:
+      default:
+        #### setting for services call web server by host name
+        aliases:
+          - ${_VIRTUAL_HOST:-localhost}
+
+  db:
+    container_name: db
+    image: churchcrm/crm:db-${_DB_OS:-alpine}
+    build:
+      dockerfile: Dockerfile.${_DB_OS:-alpine}
+      context: ./build/mysql
+    volumes:
+      - db-volume:/var/lib/mysql
+      - ./setting/sql/pre-init.d/:/scripts/pre-init.d/
+    secrets:
+      - crm_secrets
+
+  php:
+    container_name: php
+    image: churchcrm/crm:php-${_PHP_OS:-latest}
+    build:
+      dockerfile: Dockerfile.${_PHP_OS:-latest}
+      context: ./build/php
+    links:
+      - db
+    environment:
+      - MYSQL_DB_HOST=db
+      - LC_ALL=${_ALPINE_LC_ALL:-en_US}
+      ##### RELEASE_VERSION avaiable value: latest, 3.1.0
+      - RELEASE_VERSION=${_CRM_VERSION:-latest}
+      - VIRTUAL_HOST=${_VIRTUAL_HOST:-localhost}
+      - VIRTUAL_PROTO=fastcgi
+      - VIRTUAL_ROOT=/var/www/CRM/churchcrm
+      - VIRTUAL_PORT=9000
+      - EXTRA_RWRULE=churchcrm
+      - EXTRA_RWRULE_LOCATION=churchcrm_location
+      - FORWARD_PORTS_TO_LOCALHOST=${_WEB_HTTP_PORT:-80}:web:80,${_WEB_HTTPS_PORT:-443}:web:443
+      - ENABLE_ACME=${_ENABLE_ACME:-false}                  ##### letsencrypt setting
+      - ENABLE_HSTS=${_ENABLE_HSTS:-false}
+    volumes:
+      - php-volume:/var/www
+      - ./setting/php/pre-init.d/:/scripts/pre-init.d/
+      - ./setting/php/php.ini:/usr/local/etc/php/php.ini
+      - ./setting/php/php-fpm.d/www.conf:/usr/local/etc/php-fpm.d/www.conf:ro
+      - ${_LOG_FOLDER:-./log}/php:/usr/local/var/log      #### log
+      - ${_LOG_FOLDER:-./log}/churchcrm:/mnt/logs         #### log
+    secrets:
+      - crm_secrets
+
+secrets:
+  crm_secrets:
+    file: ${_CRM_SRCRETS:-./secrets/crm_sql_secrets.json}
+  dns_api:
+    file: ${_DNS_API_SRCRETS:-./secrets/dns_api.json}
+  ssl:
+    file: ${_SSL_SRCRETS:-./secrets/ssl.json}
+
+volumes:
+  db-volume:
+  dhparam-volume:
+  php-volume:

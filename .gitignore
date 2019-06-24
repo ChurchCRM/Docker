@@ -1,1 +1,4 @@
 line-endings.sh
+.vagrant
+/keys
+/log
